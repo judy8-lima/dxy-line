@@ -5,7 +5,7 @@
 """
 import os, sys, glob, time, datetime as dt
 from zoneinfo import ZoneInfo
-import pandas as pd, requests, yfinance as yf
+import numpy as np, pandas as pd, requests, yfinance as yf
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -65,17 +65,39 @@ def add_indicators(df):
 
 def draw(df, name, dec):
     d = df.tail(BARS)
-    x = range(len(d))
+    x = np.arange(len(d))
     fig, ax = plt.subplots(4, 1, figsize=(10, 13), sharex=True,
                            gridspec_kw={"height_ratios": [3, 1.3, 1.3, 1.5]})
-    ax[0].plot(x, d["Close"], color="black", lw=1.2, label="Close")
-    ax[0].plot(x, d["MA"], color="orange", lw=1, label=f"MA{BB_N}")
-    ax[0].plot(x, d["UP"], color="red", lw=0.8, label="Upper")
-    ax[0].plot(x, d["DN"], color="green", lw=0.8, label="Lower")
-    ax[0].fill_between(x, d["UP"], d["DN"], alpha=0.08)
-    ax[0].set_title(f"{name}  {d.index[-1].date()}  Close {d['Close'].iloc[-1]:.{dec}f}   "
+    # ---- 主圖：K線（紅漲綠跌）+ 布林通道 ----
+    o, hi, lo, cl = d["Open"], d["High"], d["Low"], d["Close"]
+    col = ["red" if c >= op else "green" for c, op in zip(cl, o)]
+    span = float(hi.max() - lo.min())
+    ax[0].vlines(x, lo, hi, colors=col, lw=0.8)
+    ax[0].bar(x, (cl - o).abs().clip(lower=span * 0.002),
+              bottom=np.minimum(o, cl), color=col, width=0.6)
+    ax[0].plot(x, d["MA"], color="orange", lw=1.2)
+    ax[0].plot(x, d["UP"], color="royalblue", lw=0.9, ls="--")
+    ax[0].plot(x, d["DN"], color="royalblue", lw=0.9, ls="--")
+    ax[0].fill_between(x, d["UP"], d["DN"], alpha=0.06, color="royalblue")
+    ax[0].set_title(f"{name}  {d.index[-1].date()}  Close {cl.iloc[-1]:.{dec}f}   "
                     f"BB({BB_N},{BB_K})", loc="left")
-    ax[0].legend(loc="upper left", ncol=4, fontsize=8)
+    # 最新一根的數值標示（右側，避免互相重疊）
+    last = len(d) - 1
+    items = [("Close", cl.iloc[-1], "black"),
+             ("Upper", d["UP"].iloc[-1], "royalblue"),
+             (f"MA{BB_N}", d["MA"].iloc[-1], "orange"),
+             ("Lower", d["DN"].iloc[-1], "royalblue")]
+    items.sort(key=lambda t: -t[1])
+    gap, prev = span * 0.06, None
+    for label, val, colr in items:
+        y = val if prev is None or prev - val >= gap else prev - gap
+        prev = y
+        ax[0].annotate(f"{label} {val:.{dec}f}", xy=(last, val), xytext=(last + 2, y),
+                       color=colr, fontsize=9, fontweight="bold", va="center",
+                       arrowprops=dict(arrowstyle="-", color=colr, lw=0.6),
+                       annotation_clip=False)
+    ax[0].axhline(cl.iloc[-1], color="black", lw=0.5, ls=":")
+    ax[0].set_xlim(-1, len(d) + 17)
     ax[1].plot(x, d["K"], color="blue", label="K"); ax[1].plot(x, d["D"], color="red", label="D")
     ax[1].axhline(80, ls="--", c="gray", lw=.6); ax[1].axhline(20, ls="--", c="gray", lw=.6)
     ax[1].set_title(f"KD({KD_N},{KD_M1},{KD_M2})  K={d['K'].iloc[-1]:.1f} D={d['D'].iloc[-1]:.1f}",
