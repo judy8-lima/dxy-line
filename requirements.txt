@@ -1,0 +1,5 @@
+-e yfinance
+pandas
+matplotlib
+pillow
+requests
