@@ -1,0 +1,28 @@
+name: dxy-daily
+on:
+  schedule:
+    - cron: "30 23 * * 1-5"   # 台灣時間 週二~週六 07:30（美股收盤後）
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - run: python dxy_line.py chart
+      - name: Commit chart
+        run: |
+          git config user.name "bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add charts
+          git commit -m "chart $(date +%F)" || echo "no changes"
+          git push
+      - name: Send to LINE
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: python dxy_line.py send
